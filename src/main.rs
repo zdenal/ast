@@ -5,14 +5,12 @@
 extern crate serde;
 extern crate serde_json;
 
-use std::fmt;
 use serde::{Deserialize, Deserializer};
 use serde::de::{SeqVisitor, MapVisitor, Visitor, Error};
 
 #[derive(Debug)]
 enum Expression {
-	And { children: Vec<Expression>, not: bool },
-	Or { children: Vec<Expression>, not: bool },
+	Operator { _type: Key, children: Vec<Expression>, not: bool },
 	Code(String)
 }
 
@@ -21,6 +19,41 @@ enum Key {
   And,
   Or,
   Not
+}
+
+impl Key {
+  fn to_string(&self) -> String {
+    match self {
+      &Key::And => " AND ".to_string(),
+      &Key::Or => " OR ".to_string(),
+      &Key::Not => " NOT ".to_string()
+    }
+  }
+}
+
+impl Expression {
+  fn to_sql(&self) -> String {
+    let sql;
+
+    match self {
+      &Expression::Operator {ref _type, ref children, not} => {
+        let children_sql = children
+          .iter()
+          .map(|child| child.to_sql())
+          .collect::<Vec<_>>().join(&_type.to_string());
+
+        let not_part = if not == true { Key::Not.to_string() } else { "".to_string() };
+
+        sql = format!("{}( {} )", not_part, children_sql);
+      }
+
+      &Expression::Code(ref code) => {
+        sql = code.to_string().split(".").collect::<Vec<_>>().join(" = ");
+      }
+    }
+
+    sql
+  }
 }
 
 struct ExpressionVec(Vec<Expression>);
@@ -112,21 +145,24 @@ impl Deserialize for Expression {
           let ExpressionVec(children) = expression_vec;
 
           return match operator {
-            Key::And => Ok(Expression::And {children: children, not: not}),
-            Key::Or => Ok(Expression::Or {children: children, not: not}),
+            Key::And => Ok(Expression::Operator {_type: Key::And, children: children, not: not}),
+            Key::Or => Ok(Expression::Operator {_type: Key::Or, children: children, not: not}),
             _ => Err(Error::unknown_field("unkonwn field"))
           }
         }
     }
 
-		deserializer.deserialize_map(ExpressionVisitor)
+		deserializer.deserialize(ExpressionVisitor)
 	}
 }
 
 fn main() {
     let expression = "{\"and\":[\"some.value\",\"some.value\", {\"or\":[\"some.value\",\"some.value\"]}], \"not\": \"true\"}";
+    //let expression = "{\"and\":[{\"or\":[{\"or\":[\"some.value\",\"some.value\"]}]}], \"not\": \"true\"}";
+    //let expression = "{\"and\":[], \"not\": \"true\"}";
+    //let expression = "{}";
 
     let deserialized: Expression = serde_json::from_str(&expression).unwrap();
 
-    println!("Origin expression: {:?}", deserialized);
+    println!("Origin expression: {}", deserialized.to_sql());
 }
