@@ -5,29 +5,15 @@
 extern crate serde;
 extern crate serde_json;
 
+use std::fmt;
 use serde::{Deserialize, Deserializer};
 use serde::de::{SeqVisitor, MapVisitor, Visitor, Error};
 
-#[derive(Deserialize, Debug)]
-struct AndExpression {
-	children: Vec<Expression>,
-	not: bool
-}
-
-#[derive(Deserialize, Debug)]
-struct OrExpression {
-	children: Vec<Expression>,
-	not: bool
-}
-
-#[derive(Deserialize, Debug)]
-struct CodeExpression(String);
-
 #[derive(Debug)]
 enum Expression {
-	And(AndExpression),
-	Or(OrExpression),
-	Code(CodeExpression)
+	And { children: Vec<Expression>, not: bool },
+	Or { children: Vec<Expression>, not: bool },
+	Code(String)
 }
 
 #[derive(Debug)]
@@ -95,7 +81,7 @@ impl Deserialize for Expression {
       fn visit_str<E>(&mut self, value: &str) -> Result<Self::Value, E>
         where E: Error
         {
-          return Ok(Expression::Code(CodeExpression(value.to_string())));
+          return Ok(Expression::Code(value.to_string()));
         }
 
       fn visit_map<V>(&mut self, mut visitor: V) -> Result<Self::Value, V::Error>
@@ -126,8 +112,8 @@ impl Deserialize for Expression {
           let ExpressionVec(children) = expression_vec;
 
           return match operator {
-            Key::And => Ok(Expression::And(AndExpression {children: children, not: not})),
-            Key::Or => Ok(Expression::Or(OrExpression {children: children, not: not})),
+            Key::And => Ok(Expression::And {children: children, not: not}),
+            Key::Or => Ok(Expression::Or {children: children, not: not}),
             _ => Err(Error::unknown_field("unkonwn field"))
           }
         }
